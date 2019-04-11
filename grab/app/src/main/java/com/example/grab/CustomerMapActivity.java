@@ -58,7 +58,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
     private Button mlogout, mRequest, mThongtin;
     private EditText mSearchBox;
     private LatLng VitriKhach, goalPosition;
-    private boolean requestBol = false, chooseGoal = false, huy = false;
+    private boolean requestBol = false, chooseGoal = false;
     private Marker khachMarker, goalMarker;
     private String driverName, driverSdt, khoangcach, giatien, goalAdress;
     AlertDialog.Builder builder, builder2;
@@ -154,8 +154,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
             public void onClick(View v) {
                 if(chooseGoal){
                     if(requestBol){
-                        requestBol = false;
-                        huy = true;
+                        mThongtin.setVisibility(View.INVISIBLE);
                         geoQuery.removeAllListeners();
                         if(driverLocationRefListioner != null){
                             driverLocationRef.removeEventListener(driverLocationRefListioner);
@@ -163,33 +162,11 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
 
                         if(driverID != null){
                             DatabaseReference driverRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Drivers").child(driverID).child("CustomerRideId");
-                            driverRef.addValueEventListener(new ValueEventListener() {
-                                @Override
-                                public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                                    if(!dataSnapshot.exists() && huy == true){
-                                        AlertDialog.Builder hoantatBuider = new AlertDialog.Builder(CustomerMapActivity.this);
-                                        hoantatBuider.setTitle("Thong bao");
-                                        hoantatBuider.setMessage("Chuyen di da hoan tat");
-                                        hoantatBuider.setPositiveButton("Xong", new DialogInterface.OnClickListener() {
-                                            @Override
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                dialog.cancel();
-                                            }
-                                        });
-                                        AlertDialog hoantat = hoantatBuider.create();
-                                        hoantat.show();
-                                        mThongtin.setVisibility(View.INVISIBLE);
-                                    }
-                                }
-
-                                @Override
-                                public void onCancelled(@NonNull DatabaseError databaseError) {
-
-                                }
-                            });
                             driverRef.removeValue();
                             driverID = null;
+
                         }
+                        requestBol = false;
                         driverFound = false;
                         bankinh = 1;
                         String userID = FirebaseAuth.getInstance().getCurrentUser().getUid();
@@ -200,7 +177,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
                         if(khachMarker != null){
                             khachMarker.remove();
                         }
-                        mThongtin.setVisibility(View.INVISIBLE);
+
                         mRequest.setText("Goi xe");
                     }else {
                         requestBol = true;
@@ -257,12 +234,12 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
                     driverFound = true;
                     driverID = key;
 
+
                     DatabaseReference driverRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Drivers").child(driverID);
                     String customerID = FirebaseAuth.getInstance().getCurrentUser().getUid();
                     HashMap map = new HashMap();
                     map.put("CustomerRideId", customerID);
                     driverRef.updateChildren(map);
-
                     getDriverLocation();
                     mRequest.setText("Dang lay vi tri cua xe om");
 
