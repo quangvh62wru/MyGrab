@@ -2,7 +2,6 @@ package com.example.grab;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -13,41 +12,30 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewDebug;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
 import com.firebase.geofire.GeoQuery;
 import com.firebase.geofire.GeoQueryEventListener;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -70,7 +58,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
     private Button mlogout, mRequest, mThongtin;
     private EditText mSearchBox;
     private LatLng VitriKhach, goalPosition;
-    private boolean requestBol = false, chooseGoal = false;
+    private boolean requestBol = false, chooseGoal = false, huy = false;
     private Marker khachMarker, goalMarker;
     private String driverName, driverSdt, khoangcach, giatien, goalAdress;
     AlertDialog.Builder builder, builder2;
@@ -91,7 +79,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
             @Override
             public void onLocationChanged(Location location) {
                 mLastLocation = location;
-                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+//                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
             }
 
             @Override
@@ -121,6 +109,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
             return;
         }
         mLastLocation = mLocationManager.getLastKnownLocation("gps");
+
         mSearchBox.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
@@ -166,6 +155,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
                 if(chooseGoal){
                     if(requestBol){
                         requestBol = false;
+                        huy = true;
                         geoQuery.removeAllListeners();
                         if(driverLocationRefListioner != null){
                             driverLocationRef.removeEventListener(driverLocationRefListioner);
@@ -173,6 +163,30 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
 
                         if(driverID != null){
                             DatabaseReference driverRef = FirebaseDatabase.getInstance().getReference().child("Users").child("Drivers").child(driverID).child("CustomerRideId");
+                            driverRef.addValueEventListener(new ValueEventListener() {
+                                @Override
+                                public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                                    if(!dataSnapshot.exists() && huy == true){
+                                        AlertDialog.Builder hoantatBuider = new AlertDialog.Builder(CustomerMapActivity.this);
+                                        hoantatBuider.setTitle("Thong bao");
+                                        hoantatBuider.setMessage("Chuyen di da hoan tat");
+                                        hoantatBuider.setPositiveButton("Xong", new DialogInterface.OnClickListener() {
+                                            @Override
+                                            public void onClick(DialogInterface dialog, int which) {
+                                                dialog.cancel();
+                                            }
+                                        });
+                                        AlertDialog hoantat = hoantatBuider.create();
+                                        hoantat.show();
+                                        mThongtin.setVisibility(View.INVISIBLE);
+                                    }
+                                }
+
+                                @Override
+                                public void onCancelled(@NonNull DatabaseError databaseError) {
+
+                                }
+                            });
                             driverRef.removeValue();
                             driverID = null;
                         }
@@ -251,7 +265,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
 
                     getDriverLocation();
                     mRequest.setText("Dang lay vi tri cua xe om");
-                    mThongtin.setVisibility(View.VISIBLE);
+
                 }
             }
 
@@ -391,7 +405,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
         giatien = Integer.toString(distance*15)+" VND";
         goalAdress = getGoalAddress();
         builder.setTitle("Thông tin chi tiết");
-        builder.setMessage("Muốn đến: "+goalAdress+"\nKhoảng cách: "+khoangcach+"\nGiá tiền: "+giatien+" VND");
+        builder.setMessage("Muốn đến: "+goalAdress+"\n\nKhoảng cách: "+khoangcach+"\n\nGiá tiền: "+giatien+" VND");
         builder.setNegativeButton("Xong", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
@@ -403,7 +417,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
     }
     private void getAllInfor(){
         builder2.setTitle("Thông tin chi tiết");
-        builder2.setMessage("Xe om: " + driverName + "\nSDT: " + driverSdt + "\nMuốn đến: "+goalAdress+"\nKhoảng cách: "+khoangcach+"\nGiá tiền: "+giatien+" VND");
+        builder2.setMessage("Xe om: " + driverName + "\n\nSDT: " + driverSdt + "\n\nMuốn đến: "+goalAdress+"\n\nKhoảng cách: "+khoangcach+"\n\nGiá tiền: "+giatien+" VND");
         builder2.setNegativeButton("Xong", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
@@ -419,6 +433,7 @@ public class CustomerMapActivity extends FragmentActivity implements OnMapReadyC
             }
         });
         alertDialog2 = builder2.create();
+        mThongtin.setVisibility(View.VISIBLE);
     }
     private String getGoalAddress(){
         Locale locale = new Locale("vi_VN");

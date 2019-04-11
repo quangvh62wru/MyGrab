@@ -2,44 +2,33 @@ package com.example.grab;
 
 import android.Manifest;
 import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.Service;
-import android.bluetooth.BluetoothClass;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
-import android.os.Bundle;
-import android.text.Layout;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewDebug;
-import android.view.Window;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.firebase.geofire.GeoFire;
 import com.firebase.geofire.GeoLocation;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -47,7 +36,7 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -55,15 +44,21 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.security.Provider;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class DriverMapActivity extends FragmentActivity implements OnMapReadyCallback {
 
+    private ArrayList markerPoints;
     private GoogleMap mMap;
     private LocationManager mLocationManager;
     private LocationListener mLocationListener;
@@ -75,6 +70,7 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
     private String goalAdress, tenKhach = "", sdtKhach = "";
     AlertDialog.Builder builder, builder2;
     AlertDialog alertDialog, alertDialog2;
+    LatLng customerLatLng;
 
 
     @Override
@@ -84,6 +80,7 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+        markerPoints = new ArrayList();
         builder = new AlertDialog.Builder(DriverMapActivity.this);
         builder2 = new AlertDialog.Builder(DriverMapActivity.this);
         Toast.makeText(this, "Dang nhap thanh cong", Toast.LENGTH_LONG).show();
@@ -92,16 +89,16 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
             // TODO: Consider calling
             return;
         }
-//        mLastLocation = mLocationManager.getLastKnownLocation("gps");
-//        String userID = FirebaseAuth.getInstance().getCurrentUser().getUid();
-//        DatabaseReference refAvailable = FirebaseDatabase.getInstance().getReference().child("DriversAvailable");
-//        GeoFire geoFireAvailable = new GeoFire(refAvailable);
-//        geoFireAvailable.setLocation(userID, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
+        mLastLocation = mLocationManager.getLastKnownLocation("gps");
+        String userID = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        DatabaseReference refAvailable = FirebaseDatabase.getInstance().getReference().child("DriversAvailable");
+        GeoFire geoFireAvailable = new GeoFire(refAvailable);
+        geoFireAvailable.setLocation(userID, new GeoLocation(mLastLocation.getLatitude(), mLastLocation.getLongitude()));
 
         mLocationListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+                if(location != null) mLastLocation = new Location(location);
 //                mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
 //                mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
 
@@ -206,6 +203,7 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
                     if (assignedCustomerPickupLocationRefListener != null) {
                         assignedCustomerPickupLocationRef.removeEventListener(assignedCustomerPickupLocationRefListener);
                     }
+                    mMap.clear();
                     builder2.setTitle("Thong bao");
                     builder2.setMessage("Khach hang da huy chuyen");
                     builder2.setNegativeButton("Thoat", new DialogInterface.OnClickListener() {
@@ -260,9 +258,30 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
                     if (map.get(1) != null) {
                         locationLng = Double.parseDouble(map.get(1).toString());
                     }
-                    LatLng driverLatLng = new LatLng(locationLat, locationLng);
+                    customerLatLng = new LatLng(locationLat, locationLng);
                     getCustomerInfor();
-                    khachMarker = mMap.addMarker(new MarkerOptions().position(driverLatLng).title("Khach o day"));
+                    khachMarker = mMap.addMarker(new MarkerOptions().position(customerLatLng).title("Khach o day"));
+                    LatLng driverLatLng = new LatLng(mLastLocation.getLatitude(),mLastLocation.getLongitude());
+                    // Adding new item to the ArrayList
+                    markerPoints.add(driverLatLng);
+                    markerPoints.add(customerLatLng);
+                    // Creating MarkerOptions
+                    MarkerOptions options = new MarkerOptions();
+
+                    // Setting the position of the marker
+                    options.position(customerLatLng);
+                    // Add new marker to the Google Map Android API V2
+                    mMap.addMarker(options);
+
+                    LatLng origin = (LatLng) markerPoints.get(0);
+                    LatLng dest = (LatLng) markerPoints.get(1);
+
+                    // Getting URL to the Google Directions API
+                    String url = getDirectionsUrl(origin, dest);
+                    DownloadTask downloadTask = new DownloadTask();
+
+                    // Start downloading json data from Google Directions API
+                    downloadTask.execute(url);
                 }
             }
 
@@ -302,6 +321,25 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
                     Double locationLng = Double.parseDouble(infor.get(1).toString());
                     LatLng goalLatLng = new LatLng(locationLat, locationLng);
                     khachMarker = mMap.addMarker(new MarkerOptions().position(goalLatLng).title("Day la diem den"));
+                    markerPoints.add(customerLatLng);
+                    markerPoints.add(goalLatLng);
+                    // Creating MarkerOptions
+                    MarkerOptions options = new MarkerOptions();
+
+                    // Setting the position of the marker
+                    options.position(goalLatLng);
+                    // Add new marker to the Google Map Android API V2
+                    mMap.addMarker(options);
+
+                    LatLng origin = (LatLng) markerPoints.get(2);
+                    LatLng dest = (LatLng) markerPoints.get(3);
+
+                    // Getting URL to the Google Directions API
+                    String url = getDirectionsUrl(origin, dest);
+                    DownloadTask downloadTask = new DownloadTask();
+
+                    // Start downloading json data from Google Directions API
+                    downloadTask.execute(url);
                 } else {
 
                 }
@@ -326,7 +364,7 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
                         goalAdress = infor.get("GoalAdress").toString();
                         String giatien = infor.get("GiaTien").toString();
                         builder.setTitle("Đã bắt được khách");
-                        builder.setMessage("Ten khach: " + tenKhach + "\nSdt: " + sdtKhach + "\nKhoangcach: " + khoangcach + "\nGia tien: " + giatien + "\nMuốn đến: " + goalAdress);
+                        builder.setMessage("Ten khach: " + tenKhach + "\n\nSdt: " + sdtKhach + "\n\nKhoangcach: " + khoangcach + "\n\nGia tien: " + giatien + "\n\nMuốn đến: " + goalAdress);
                         builder.setNegativeButton("Thoat", new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
@@ -366,6 +404,7 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
 
                                         dialog.cancel();
                                         alertDialog.cancel();
+                                        mMap.clear();
                                     }
                                 });
                                 xacnhan.setNegativeButton("Huy", new DialogInterface.OnClickListener() {
@@ -426,6 +465,186 @@ public class DriverMapActivity extends FragmentActivity implements OnMapReadyCal
 
         DatabaseReference customerRideId = FirebaseDatabase.getInstance().getReference().child("Users").child("Drivers").child(userID).child("CustomerRideId");
         customerRideId.removeValue();
+    }
+    private String getDirectionsUrl(LatLng origin,LatLng dest){
+
+//        // Origin of route
+//        String str_origin = "origin="+origin.latitude+","+origin.longitude;
+//
+//        // Destination of route
+//        String str_dest = "destination="+dest.latitude+","+dest.longitude;
+//
+//        // Sensor enabled
+//        String sensor = "sensor=false";
+//
+////        String key = "key=" + getResources().getString(R.string.google_maps_key);
+//
+//        // Building the parameters to the web service
+//        String parameters = str_origin+"&"+str_dest+"&"+sensor ;
+//
+//        // Output format
+//        String output = "json";
+//
+//
+//        // Building the url to the web service
+//        String url = "https://maps.googleapis.com/maps/api/directions/"+output+"?"+parameters;
+// Origin of route
+        String str_origin = "origin=" + origin.latitude + "," + origin.longitude;
+
+        // Destination of route
+        String str_dest = "destination=" + dest.latitude + "," + dest.longitude;
+
+        // Sensor enabled
+        String sensor = "sensor=false";
+        String mode = "mode=driving";
+
+        String key = "key=AIzaSyAqv8zngFpnl_wiSuT5gmUVAQ6PrVICzIQ";
+        // Building the parameters to the web service
+        String parameters = str_origin + "&" + str_dest + "&" + sensor + "&" + mode+"&"+key;
+
+        // Output format
+        String output = "json";
+
+        // Building the url to the web service
+        String url = "https://maps.googleapis.com/maps/api/directions/" + output + "?" + parameters;
+        Log.e("URL",url);
+        return url;
+    }
+
+    /** A method to download json data from url */
+    private String downloadUrl(String strUrl) throws IOException {
+        String data = "";
+        InputStream iStream = null;
+        HttpURLConnection urlConnection = null;
+        try{
+            URL url = new URL(strUrl);
+
+            // Creating an http connection to communicate with url
+            urlConnection = (HttpURLConnection) url.openConnection();
+
+            // Connecting to url
+            urlConnection.connect();
+
+            // Reading data from url
+            iStream = urlConnection.getInputStream();
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(iStream));
+
+            StringBuffer sb = new StringBuffer();
+
+            String line = "";
+            while( ( line = br.readLine()) != null){
+                sb.append(line);
+            }
+
+            data = sb.toString();
+
+            br.close();
+
+        }catch(Exception e){
+            Log.d("Exception while downloading url", e.toString());
+        }finally{
+            iStream.close();
+            urlConnection.disconnect();
+        }
+        return data;
+    }
+
+    // Fetches data from url passed
+    private class DownloadTask extends AsyncTask<String, Void, String> {
+
+        // Downloading data in non-ui thread
+        @Override
+        protected String doInBackground(String... url) {
+
+            // For storing data from web service
+            String data = "";
+
+            try{
+                // Fetching the data from web service
+                data = downloadUrl(url[0]);
+            }catch(Exception e){
+                Log.d("Background Task",e.toString());
+            }
+            return data;
+        }
+
+        // Executes in UI thread, after the execution of
+        // doInBackground()
+        @Override
+        protected void onPostExecute(String result) {
+            super.onPostExecute(result);
+
+            ParserTask parserTask = new ParserTask();
+
+            // Invokes the thread for parsing the JSON data
+            parserTask.execute(result);
+
+        }
+    }
+
+    private class ParserTask extends AsyncTask<String, Integer, List<List<HashMap<String,String>>> >{
+
+        // Parsing the data in non-ui thread
+        @Override
+        protected List<List<HashMap<String, String>>> doInBackground(String... jsonData) {
+
+            JSONObject jObject;
+            List<List<HashMap<String, String>>> routes = null;
+
+            try{
+                jObject = new JSONObject(jsonData[0]);
+                DirectionsJSONParser parser = new DirectionsJSONParser();
+
+                // Starts parsing data
+                routes = parser.parse(jObject);
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+            return routes;
+        }
+
+        // Executes in UI thread, after the parsing process
+        @Override
+        protected void onPostExecute(List<List<HashMap<String, String>>> result) {
+            ArrayList points = null;
+            PolylineOptions lineOptions = null;
+            if(result.size()==0){
+
+                return;
+            }
+
+            MarkerOptions markerOptions = new MarkerOptions();
+
+            // Traversing through all the routes
+            for(int i=0;i<result.size();i++){
+                points = new ArrayList();
+                lineOptions = new PolylineOptions();
+
+                // Fetching i-th route
+                List<HashMap<String, String>> path = result.get(i);
+
+                // Fetching all the points in i-th route
+                for(int j=0;j <path.size();j++){
+                    HashMap<String,String> point = path.get(j);
+
+                    double lat = Double.parseDouble(point.get("lat"));
+                    double lng = Double.parseDouble(point.get("lng"));
+                    LatLng position = new LatLng(lat, lng);
+
+                    points.add(position);
+                }
+
+                // Adding all the points in the route to LineOptions
+                lineOptions.addAll(points);
+                lineOptions.width(2);
+                lineOptions.color(Color.RED);
+
+            }
+
+            // Drawing polyline in the Google Map for the i-th route
+            mMap.addPolyline(lineOptions);
+        }
     }
 
     @Override
